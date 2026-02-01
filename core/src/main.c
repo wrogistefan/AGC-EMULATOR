@@ -37,7 +37,7 @@ static void disasm_word(agc_word_t instr, char *buf, size_t buf_size) {
 
 static void dump_cpu(const agc_cpu_t *cpu) {
     printf(CLR_HEADER "\n=== AGC CPU STATE ===\n" CLR_RESET);
-    printf(CLR_INFO "BANK: %d\n" CLR_RESET, cpu->current_bank);
+    printf(CLR_INFO "EB: %d, FB: %d\n" CLR_RESET, cpu->EB, cpu->FB);
     printf("A: %04o\n", cpu->A);
     printf("L: %04o\n", cpu->L);
     printf("Q: %04o\n", cpu->Q);
@@ -49,7 +49,7 @@ static void repl(void) {
     agc_cpu_t cpu;
     agc_cpu_reset(&cpu);
 
-    
+    bool rom_loaded = false;
 
     printf(CLR_HEADER "AGC Emulator Interactive Mode\n" CLR_RESET);
     printf("Commands:\n");
@@ -58,10 +58,12 @@ static void repl(void) {
     printf("  " CLR_INFO "run <n>" CLR_RESET "                    - execute n instructions\n");
     printf("  " CLR_INFO "dump" CLR_RESET "                       - show CPU registers\n");
     printf("  " CLR_INFO "dis <addr>" CLR_RESET "                 - disassemble word at addr\n");
-    printf("  " CLR_INFO "bank <n>" CLR_RESET "                   - set current bank\n");
+    printf("  " CLR_INFO "eb <n>" CLR_RESET "                   - set erasable bank (EB)\n");
+    printf("  " CLR_INFO "fb <n>" CLR_RESET "                   - set fixed bank (FB)\n");
     printf("  " CLR_INFO "mem <start> <end>" CLR_RESET "          - dump memory range\n");
     printf("  " CLR_INFO "peek <addr>" CLR_RESET "                - read memory at addr\n");
     printf("  " CLR_INFO "poke <addr> <val>" CLR_RESET "          - write val to addr\n");
+    printf("  " CLR_INFO "rom <filename>" CLR_RESET "              - load ROM binary\n");
     printf("  " CLR_INFO "quit" CLR_RESET "                       - exit emulator\n\n");
 
     char line[256];
@@ -108,7 +110,7 @@ static void repl(void) {
             unsigned int value;
             if (sscanf(line, "load %o %o", &addr, &value) == 2) {
                 agc_memory_write(&cpu, addr, (agc_word_t)value);
-                printf("Loaded %04o into %04o (bank %d)\n", value, addr, cpu.current_bank);
+                printf("Loaded %04o into %04o (EB:%d FB:%d)\n", value, addr, cpu.EB, cpu.FB);
             } else {
                 printf(CLR_ERROR "Usage: load <addr> <octal_value>\n" CLR_RESET);
             }
@@ -121,18 +123,42 @@ static void repl(void) {
                 agc_word_t instr = agc_memory_read(&cpu, addr);
                 char dis[32];
                 disasm_word(instr, dis, sizeof(dis));
-                printf("(%d:%04o) %04o  %s\n", cpu.current_bank, addr, instr, dis);
+                printf("(%d:%04o) %04o  %s\n", (addr < 02000) ? cpu.EB : cpu.FB, addr, instr, dis);
             } else {
                 printf(CLR_ERROR "Usage: dis <addr>\n" CLR_RESET);
             }
             continue;
         }
 
+        if (strncmp(line, "eb", 2) == 0) {
+            int b;
+            if (sscanf(line, "eb %d", &b) == 1 && b >= 0) {
+                cpu.EB = b;
+                printf("Switched to erasable bank %d\n", cpu.EB);
+            } else {
+                printf("Usage: eb <non_negative_integer>\n");
+            }
+            continue;
+        }
+        
+        if (strncmp(line, "fb", 2) == 0) {
+            int b;
+            if (sscanf(line, "fb %d", &b) == 1 && b >= 0) {
+                cpu.FB = b;
+                printf("Switched to fixed bank %d\n", cpu.FB);
+            } else {
+                printf("Usage: fb <non_negative_integer>\n");
+            }
+            continue;
+        }
+        
         if (strncmp(line, "bank", 4) == 0) {
             int b;
             if (sscanf(line, "bank %d", &b) == 1 && b >= 0) {
-                cpu.current_bank = b;
-                printf("Switched to bank %d\n", cpu.current_bank);
+                // Legacy command: set both EB and FB to same bank
+                cpu.EB = b;
+                cpu.FB = b;
+                printf("Switched to bank %d (EB=%d FB=%d)\n", b, cpu.EB, cpu.FB);
             } else {
                 printf("Usage: bank <non_negative_integer>\n");
             }
@@ -155,7 +181,7 @@ static void repl(void) {
             unsigned int value;
             if (sscanf(line, "poke %o %o", &addr, &value) == 2) {
                 agc_memory_write(&cpu, addr, (agc_word_t)value);
-                printf("Wrote %04o into %04o (bank %d)\n", value, addr, cpu.current_bank);
+                printf("Wrote %04o into %04o (EB:%d FB:%d)\n", value, addr, cpu.EB, cpu.FB);
             } else {
                 printf("Usage: poke <addr> <octal_value>\n");
             }
@@ -165,7 +191,7 @@ static void repl(void) {
         if (strncmp(line, "mem", 3) == 0) {
             int start, end;
             if (sscanf(line, "mem %o %o", &start, &end) == 2) {
-                printf("\nMemory dump (bank %d):\n", cpu.current_bank);
+                printf("\nMemory dump (EB:%d FB:%d):\n", cpu.EB, cpu.FB);
 
                 int addr = start;
                 while (addr <= end) {
@@ -188,8 +214,22 @@ static void repl(void) {
                 printf("Usage: mem <start> <end>\n");
             }
             continue;
-    }
+        }
 
+        if (strncmp(line, "rom", 3) == 0) {
+            char filename[128];
+            if (sscanf(line, "rom %127s", filename) == 1) {
+                if (agc_load_rom(filename)) {
+                    printf("ROM loaded from %s\n", filename);
+                    rom_loaded = true;
+                } else {
+                    printf("Failed to load ROM from %s\n", filename);
+                }
+            } else {
+                printf("Usage: rom <filename>\n");
+            }
+            continue;
+        }
 
         printf(CLR_ERROR "Unknown command\n" CLR_RESET);
     }

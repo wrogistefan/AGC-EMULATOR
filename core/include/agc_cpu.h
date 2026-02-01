@@ -16,8 +16,6 @@ typedef struct {
     agc_word_t Q;   // Overflow / auxiliary
     agc_word_t Z;   // Program counter
     
-    int current_bank; // NEW: active memory bank
-
     // Memory bank registers
     uint8_t EB;     // Erasable bank (RAM)
     uint8_t FB;     // Fixed bank (ROM)

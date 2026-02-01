@@ -15,8 +15,8 @@
  * The remaining 12 bits represent an address or modifier.
  */
 
-#define AGC_OPCODE_MASK   0x7000
-#define AGC_ADDRESS_MASK  0x0FFF
+#define AGC_OPCODE_MASK   07000   // 0x7000 - top 3 bits for opcode
+#define AGC_ADDRESS_MASK  01777   // 0x0FFF - 12-bit address field
 
 // Extract opcode (top 3 bits)
 static inline uint8_t agc_get_opcode(agc_word_t instr) {

@@ -96,8 +96,9 @@ void agc_instr_INDEX(agc_cpu_t *cpu, uint16_t address) {
     // Read next instruction
     agc_word_t next_instr = agc_memory_read(cpu, cpu->Z);
 
-    // Modify address field
-    uint16_t new_addr = (agc_get_address(next_instr) + offset) & AGC_ADDRESS_MASK;
+    // Modify address field using proper 1's complement arithmetic
+    // This correctly handles negative offsets
+    agc_word_t new_addr = agc_add(agc_get_address(next_instr), offset) & AGC_ADDRESS_MASK;
 
     // Reconstruct instruction
     agc_word_t modified =

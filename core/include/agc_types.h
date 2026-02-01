@@ -33,4 +33,13 @@ static inline agc_word_t agc_negate(agc_word_t w) {
     return agc_normalize(~w);
 }
 
+// Add two AGC words with proper 1's complement arithmetic
+// Handles negative offsets correctly
+static inline agc_word_t agc_add(agc_word_t a, agc_word_t b) {
+    // In 1's complement: a + b = a + b (with end-around carry)
+    uint32_t sum = (uint32_t)a + (uint32_t)b;
+    uint32_t carry = sum >> 15;
+    return agc_normalize((agc_word_t)sum) + (agc_word_t)carry;
+}
+
 #endif // AGC_TYPES_H

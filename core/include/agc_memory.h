@@ -15,4 +15,6 @@ void agc_memory_write(agc_cpu_t *cpu, agc_word_t address, agc_word_t value);
 // ROM loading (for Colossus/Luminary binaries)
 void agc_memory_load_rom(const char *path);
 
-#endif // AGC_MEMORY_H
+bool agc_load_rom(const char *filename);
+
+#endif 
