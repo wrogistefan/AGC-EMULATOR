@@ -1,0 +1,18 @@
+# Build artifacts
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# VS Code
+.vscode/
+
+# Binaries
+*.o
+*.so
+*.a
+*.exe
+
+# Logs
+*.log
