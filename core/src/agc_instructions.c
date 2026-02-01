@@ -11,20 +11,20 @@ void agc_execute_instruction(agc_cpu_t *cpu, agc_word_t instr) {
     uint16_t address = agc_get_address(instr);
 
     switch (opcode) {
-        case 0: // TC – Transfer Control
+        case 0: // 00000 – TC (Transfer Control)
             agc_instr_TC(cpu, address);
             break;
 
-        case 1: // CCS – Count, Compare, Skip
-            agc_instr_CCS(cpu, address);
-            break;
-
-        case 2: // INDEX – Modify next instruction
-            agc_instr_INDEX(cpu, address);
-            break;
-
-        case 3: // XCH – Exchange
+        case 1: // 01000 – XCH (Exchange A with memory)
             agc_instr_XCH(cpu, address);
+            break;
+
+        case 2: // 02000 – TS (Transfer to Storage)
+            agc_instr_TS(cpu, address);
+            break;
+
+        case 3: // 03000 – CA (Clear and Add)
+            agc_instr_CA(cpu, address);
             break;
 
         default:
@@ -54,57 +54,23 @@ void agc_instr_XCH(agc_cpu_t *cpu, uint16_t address) {
 }
 
 /*
- * CCS – Count, Compare, Skip
+ * TS – Transfer to Storage
  *
- * This is one of the most unusual AGC instructions.
- * It loads the value from memory into A, negates it,
- * and then performs a conditional skip based on the sign.
- *
- * Behavior summary:
- *   1. A = -memory[address]
- *   2. If A > 0: skip next instruction
- *   3. If A == +0: skip next 2 instructions
- *   4. If A < 0: skip next 3 instructions
+ * Store the contents of register A into memory[address].
+ * Writes to fixed memory (ROM) are silently ignored,
+ * as per real AGC hardware behavior.
  */
-void agc_instr_CCS(agc_cpu_t *cpu, uint16_t address) {
-    agc_word_t value = agc_memory_read(cpu, address);
-
-    // 1's complement negation
-    cpu->A = agc_negate(value);
-
-    // Determine skip count
-    if (!agc_is_negative(cpu->A) && cpu->A != 0) {
-        cpu->Z = agc_normalize(cpu->Z + 1); // skip 1
-    } else if (cpu->A == 0) {
-        cpu->Z = agc_normalize(cpu->Z + 2); // skip 2
-    } else {
-        cpu->Z = agc_normalize(cpu->Z + 3); // skip 3
-    }
+void agc_instr_TS(agc_cpu_t *cpu, uint16_t address) {
+    agc_memory_write(cpu, address, cpu->A);
 }
 
 /*
- * INDEX – Modify the next instruction
+ * CA – Clear and Add
  *
- * The AGC modifies the address field of the *next* instruction
- * by adding the value stored at memory[address].
- *
- * This is how the AGC implements indirect addressing.
+ * Load the value from memory[address] into register A.
+ * This is equivalent to: A = M[addr]
  */
-void agc_instr_INDEX(agc_cpu_t *cpu, uint16_t address) {
-    agc_word_t offset = agc_memory_read(cpu, address);
-
-    // Read next instruction
-    agc_word_t next_instr = agc_memory_read(cpu, cpu->Z);
-
-    // Modify address field using proper 1's complement arithmetic
-    // This correctly handles negative offsets
-    agc_word_t new_addr = agc_add(agc_get_address(next_instr), offset) & AGC_ADDRESS_MASK;
-
-    // Reconstruct instruction
-    agc_word_t modified =
-        (next_instr & AGC_OPCODE_MASK) | new_addr;
-
-    // Write back modified instruction
-    agc_memory_write(cpu, cpu->Z, modified);
+void agc_instr_CA(agc_cpu_t *cpu, uint16_t address) {
+    cpu->A = agc_memory_read(cpu, address);
 }
 

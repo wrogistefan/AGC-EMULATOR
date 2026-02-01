@@ -50,7 +50,7 @@ void agc_memory_write(agc_cpu_t *cpu, agc_word_t addr, agc_word_t value) {
         // Clamp EB to valid range (0 to AGC_RAM_SIZE/AGC_ERASE_BANK_SIZE - 1)
         uint8_t eb = cpu->EB % (AGC_RAM_SIZE / AGC_ERASE_BANK_SIZE);
         int phys = eb * AGC_ERASE_BANK_SIZE + addr;
-        erasable[phys] = value & 017777;
+        erasable[phys] = value & 0177777;
     }
     // Writes to fixed memory (ROM) are ignored
 }
