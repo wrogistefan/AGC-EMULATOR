@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
+#include <ctype.h>
+#include <stdarg.h>
 #include "agc_cpu.h"
 #include "agc_memory.h"
 #include "agc_instructions.h"
@@ -16,6 +19,56 @@
 #define CLR_ZERO    "\033[1;30m"
 #define CLR_NONZERO "\033[1;33m"
 #define CLR_PC      "\033[1;34m"
+
+/* Helper: skip whitespace in string */
+static const char *skip_ws(const char *s) {
+    while (*s && isspace((unsigned char)*s)) s++;
+    return s;
+}
+
+/* Helper: parse octal number from string, returns -1 on error */
+static int parse_octal(const char *s) {
+    if (!s || !*s) return -1;
+    int result = 0;
+    while (*s) {
+        if (*s < '0' || *s > '7') return -1;
+        result = (result << 3) | (*s - '0');
+        s++;
+    }
+    return result;
+}
+
+/* Helper: parse positive long from string, returns false on error */
+static bool parse_positive_long(const char *s, long *out) {
+    if (!s || !*s) return false;
+    char *endptr;
+    long val = strtol(s, &endptr, 10);
+    if (endptr == s || val <= 0) return false;
+    *out = val;
+    return true;
+}
+
+/* Helper: split line into command and args */
+static void split_command(char *line, char **cmd, char **args) {
+    *cmd = (char *)skip_ws(line);
+    *args = "";
+    char *p = *cmd;
+    while (*p && !isspace((unsigned char)*p)) p++;
+    if (*p) {
+        *p = '\0';
+        *args = (char *)skip_ws(p + 1);
+    }
+}
+
+/* Helper: print colored tag with format */
+static void print_colored(const char *tag, const char *color, const char *fmt, ...) {
+    va_list ap;
+    printf("%s%s" CLR_RESET ": ", color, tag);
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
+    va_end(ap);
+    printf("\n");
+}
 
 /* Minimal AGC disassembler for core opcodes */
 static void disasm_word(agc_word_t instr, char *buf, size_t buf_size) {
@@ -45,6 +98,246 @@ static void dump_cpu(const agc_cpu_t *cpu) {
     printf(CLR_HEADER "=====================\n\n" CLR_RESET);
 }
 
+/* Command function typedef */
+typedef bool (*command_fn)(agc_cpu_t *cpu, const char *args, bool *rom_loaded);
+
+/* Command table entry */
+typedef struct {
+    const char  *name;
+    const char  *usage;
+    command_fn   run;
+} repl_command_t;
+
+/* Command implementations */
+static bool cmd_dump(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
+    (void)args; (void)rom_loaded;
+    dump_cpu(cpu);
+    return true;
+}
+
+static bool cmd_step(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
+    (void)args; (void)rom_loaded;
+    agc_cpu_step(cpu);
+    return true;
+}
+
+static bool cmd_run(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
+    long n;
+    if (!parse_positive_long(args, &n)) {
+        print_colored("Usage", CLR_ERROR, "run <positive_number>");
+        return false;
+    }
+    for (long i = 0; i < n; ++i) {
+        agc_word_t instr = agc_memory_read(cpu, cpu->Z);
+        char dis[32];
+        disasm_word(instr, dis, sizeof(dis));
+        printf("PC %04o: %04o  (%s)\n", cpu->Z, instr, dis);
+        agc_cpu_step(cpu);
+    }
+    return true;
+}
+
+static bool cmd_load(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
+    (void)rom_loaded;
+    int addr = parse_octal(args);
+    const char *space = strchr(args, ' ');
+    if (!space) {
+        print_colored("Usage", CLR_ERROR, "load <addr> <octal_value>");
+        return false;
+    }
+    int value = parse_octal(skip_ws(space));
+    if (addr < 0 || value < 0) {
+        print_colored("Usage", CLR_ERROR, "load <addr> <octal_value>");
+        return false;
+    }
+    agc_memory_write(cpu, (agc_word_t)addr, (agc_word_t)value);
+    printf("Loaded %04o into %04o (EB:%d FB:%d)\n", value, addr, cpu->EB, cpu->FB);
+    return true;
+}
+
+static bool cmd_dis(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
+    (void)rom_loaded;
+    int addr = parse_octal(args);
+    if (addr < 0) {
+        print_colored("Usage", CLR_ERROR, "dis <addr>");
+        return false;
+    }
+    agc_word_t instr = agc_memory_read(cpu, (agc_word_t)addr);
+    char dis[32];
+    disasm_word(instr, dis, sizeof(dis));
+    printf("(%d:%04o) %04o  %s\n", (addr < 02000) ? cpu->EB : cpu->FB, addr, instr, dis);
+    return true;
+}
+
+static bool cmd_eb(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
+    (void)rom_loaded;
+    long b;
+    if (!parse_positive_long(args, &b) || b < 0) {
+        print_colored("Usage", CLR_ERROR, "eb <non_negative_integer>");
+        return false;
+    }
+    cpu->EB = (uint8_t)b;
+    printf("Switched to erasable bank %d\n", cpu->EB);
+    return true;
+}
+
+static bool cmd_fb(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
+    (void)rom_loaded;
+    long b;
+    if (!parse_positive_long(args, &b) || b < 0) {
+        print_colored("Usage", CLR_ERROR, "fb <non_negative_integer>");
+        return false;
+    }
+    cpu->FB = (uint8_t)b;
+    printf("Switched to fixed bank %d\n", cpu->FB);
+    return true;
+}
+
+static bool cmd_bank(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
+    (void)rom_loaded;
+    long b;
+    if (!parse_positive_long(args, &b) || b < 0) {
+        print_colored("Usage", CLR_ERROR, "bank <non_negative_integer>");
+        return false;
+    }
+    cpu->EB = (uint8_t)b;
+    cpu->FB = (uint8_t)b;
+    printf("Switched to bank %ld (EB=%d FB=%d)\n", b, cpu->EB, cpu->FB);
+    return true;
+}
+
+static bool cmd_peek(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
+    (void)rom_loaded;
+    int addr = parse_octal(args);
+    if (addr < 0) {
+        print_colored("Usage", CLR_ERROR, "peek <addr>");
+        return false;
+    }
+    agc_word_t v = agc_memory_read(cpu, (agc_word_t)addr);
+    printf("%04o: %04o\n", addr, v);
+    return true;
+}
+
+static bool cmd_poke(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
+    (void)rom_loaded;
+    int addr = parse_octal(args);
+    const char *space = strchr(args, ' ');
+    if (!space) {
+        print_colored("Usage", CLR_ERROR, "poke <addr> <octal_value>");
+        return false;
+    }
+    int value = parse_octal(skip_ws(space));
+    if (addr < 0 || value < 0) {
+        print_colored("Usage", CLR_ERROR, "poke <addr> <octal_value>");
+        return false;
+    }
+    agc_memory_write(cpu, (agc_word_t)addr, (agc_word_t)value);
+    printf("Wrote %04o into %04o (EB:%d FB:%d)\n", value, addr, cpu->EB, cpu->FB);
+    return true;
+}
+
+static bool cmd_mem(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
+    (void)rom_loaded;
+    int start = parse_octal(args);
+    const char *space = strchr(args, ' ');
+    if (!space) {
+        print_colored("Usage", CLR_ERROR, "mem <start> <end>");
+        return false;
+    }
+    int end = parse_octal(skip_ws(space));
+    if (start < 0 || end < 0 || start > end) {
+        print_colored("Usage", CLR_ERROR, "mem <start> <end>");
+        return false;
+    }
+
+    printf("\nMemory dump (EB:%d FB:%d):\n", cpu->EB, cpu->FB);
+
+    int addr = start;
+    while (addr <= end) {
+        printf(CLR_ADDR "%04o" CLR_RESET ": ", addr);
+
+        for (int i = 0; i < 8 && addr <= end; ++i, ++addr) {
+            agc_word_t v = agc_memory_read(cpu, (agc_word_t)addr);
+
+            const char *color = (v == 0) ? CLR_ZERO : CLR_NONZERO;
+            if (addr == cpu->Z) {
+                color = CLR_PC;
+            }
+
+            printf("%s%04o" CLR_RESET " ", color, v);
+        }
+        printf("\n");
+    }
+    printf("\n");
+    return true;
+}
+
+static bool cmd_rom(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
+    (void)cpu;
+    char filename[128];
+    if (sscanf(args, "%127s", filename) != 1) {
+        print_colored("Usage", CLR_ERROR, "rom <filename>");
+        return false;
+    }
+    if (agc_load_rom(filename)) {
+        printf("ROM loaded from %s\n", filename);
+        *rom_loaded = true;
+    } else {
+        printf("Failed to load ROM from %s\n", filename);
+        return false;
+    }
+    return true;
+}
+
+static bool cmd_quit(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
+    (void)cpu; (void)args; (void)rom_loaded;
+    return false;  /* signal to exit */
+}
+
+/* Command table */
+static const repl_command_t commands[] = {
+    { "dump", "dump                       - show CPU registers", cmd_dump },
+    { "step", "step                      - execute one instruction", cmd_step },
+    { "run",  "run <positive_number>     - execute n instructions", cmd_run },
+    { "load", "load <addr> <octal_value> - write instruction/data", cmd_load },
+    { "dis",  "dis <addr>                - disassemble word at addr", cmd_dis },
+    { "eb",   "eb <n>                    - set erasable bank (EB)", cmd_eb },
+    { "fb",   "fb <n>                    - set fixed bank (FB)", cmd_fb },
+    { "bank", "bank <n>                  - set both banks to n", cmd_bank },
+    { "peek", "peek <addr>               - read memory at addr", cmd_peek },
+    { "poke", "poke <addr> <val>         - write val to addr", cmd_poke },
+    { "mem",  "mem <start> <end>         - dump memory range", cmd_mem },
+    { "rom",  "rom <filename>            - load ROM binary", cmd_rom },
+    { "quit", "quit                      - exit emulator", cmd_quit },
+};
+
+static void print_usage(const char *cmd) {
+    if (cmd) {
+        /* Find and print usage for specific command */
+        for (size_t i = 0; i < sizeof(commands)/sizeof(commands[0]); i++) {
+            if (strcmp(commands[i].name, cmd) == 0) {
+                printf("Usage: %s\n", commands[i].usage);
+                return;
+            }
+        }
+    }
+    /* Print all commands */
+    printf(CLR_HEADER "Available commands:\n" CLR_RESET);
+    for (size_t i = 0; i < sizeof(commands)/sizeof(commands[0]); i++) {
+        printf("  " CLR_INFO "%s\n" CLR_RESET, commands[i].usage);
+    }
+    printf("\n");
+}
+
+static const repl_command_t *find_command(const char *name) {
+    for (size_t i = 0; i < sizeof(commands)/sizeof(commands[0]); i++) {
+        if (strcmp(commands[i].name, name) == 0) {
+            return &commands[i];
+        }
+    }
+    return NULL;
+}
+
 static void repl(void) {
     agc_cpu_t cpu;
     agc_cpu_reset(&cpu);
@@ -52,19 +345,7 @@ static void repl(void) {
     bool rom_loaded = false;
 
     printf(CLR_HEADER "AGC Emulator Interactive Mode\n" CLR_RESET);
-    printf("Commands:\n");
-    printf("  " CLR_INFO "load <addr> <octal_value" CLR_RESET ">   - write instruction/data\n");
-    printf("  " CLR_INFO "step" CLR_RESET "                       - execute one instruction\n");
-    printf("  " CLR_INFO "run <n>" CLR_RESET "                    - execute n instructions\n");
-    printf("  " CLR_INFO "dump" CLR_RESET "                       - show CPU registers\n");
-    printf("  " CLR_INFO "dis <addr>" CLR_RESET "                 - disassemble word at addr\n");
-    printf("  " CLR_INFO "eb <n>" CLR_RESET "                   - set erasable bank (EB)\n");
-    printf("  " CLR_INFO "fb <n>" CLR_RESET "                   - set fixed bank (FB)\n");
-    printf("  " CLR_INFO "mem <start> <end>" CLR_RESET "          - dump memory range\n");
-    printf("  " CLR_INFO "peek <addr>" CLR_RESET "                - read memory at addr\n");
-    printf("  " CLR_INFO "poke <addr> <val>" CLR_RESET "          - write val to addr\n");
-    printf("  " CLR_INFO "rom <filename>" CLR_RESET "              - load ROM binary\n");
-    printf("  " CLR_INFO "quit" CLR_RESET "                       - exit emulator\n\n");
+    print_usage(NULL);
 
     char line[256];
 
@@ -76,162 +357,22 @@ static void repl(void) {
         /* strip newline */
         line[strcspn(line, "\r\n")] = '\0';
 
-        if (strncmp(line, "quit", 4) == 0)
+        /* skip empty lines */
+        if (skip_ws(line)[0] == '\0')
+            continue;
+
+        char *cmd, *args;
+        split_command(line, &cmd, &args);
+
+        const repl_command_t *entry = find_command(cmd);
+        if (!entry) {
+            printf(CLR_ERROR "Unknown command: %s\n" CLR_RESET, cmd);
+            print_usage(NULL);
+            continue;
+        }
+
+        if (!entry->run(&cpu, args, &rom_loaded))
             break;
-
-        if (strncmp(line, "dump", 4) == 0) {
-            dump_cpu(&cpu);
-            continue;
-        }
-
-        if (strncmp(line, "step", 4) == 0) {
-            agc_cpu_step(&cpu);
-            continue;
-        }
-
-        if (strncmp(line, "run", 3) == 0) {
-            long n = 0;
-            if (sscanf(line, "run %ld", &n) == 1 && n > 0) {
-                for (long i = 0; i < n; ++i) {
-                    agc_word_t instr = agc_memory_read(&cpu, cpu.Z);
-                    char dis[32];
-                    disasm_word(instr, dis, sizeof(dis));
-                    printf("PC %04o: %04o  (%s)\n", cpu.Z, instr, dis);
-                    agc_cpu_step(&cpu);
-                }
-            } else {
-                printf(CLR_ERROR "Usage: run <positive_number>\n" CLR_RESET);
-            }
-            continue;
-        }
-
-        if (strncmp(line, "load", 4) == 0) {
-            int addr;
-            unsigned int value;
-            if (sscanf(line, "load %o %o", &addr, &value) == 2) {
-                agc_memory_write(&cpu, addr, (agc_word_t)value);
-                printf("Loaded %04o into %04o (EB:%d FB:%d)\n", value, addr, cpu.EB, cpu.FB);
-            } else {
-                printf(CLR_ERROR "Usage: load <addr> <octal_value>\n" CLR_RESET);
-            }
-            continue;
-        }
-
-        if (strncmp(line, "dis", 3) == 0) {
-            int addr;
-            if (sscanf(line, "dis %o", &addr) == 1) {
-                agc_word_t instr = agc_memory_read(&cpu, addr);
-                char dis[32];
-                disasm_word(instr, dis, sizeof(dis));
-                printf("(%d:%04o) %04o  %s\n", (addr < 02000) ? cpu.EB : cpu.FB, addr, instr, dis);
-            } else {
-                printf(CLR_ERROR "Usage: dis <addr>\n" CLR_RESET);
-            }
-            continue;
-        }
-
-        if (strncmp(line, "eb", 2) == 0) {
-            int b;
-            if (sscanf(line, "eb %d", &b) == 1 && b >= 0) {
-                cpu.EB = b;
-                printf("Switched to erasable bank %d\n", cpu.EB);
-            } else {
-                printf("Usage: eb <non_negative_integer>\n");
-            }
-            continue;
-        }
-        
-        if (strncmp(line, "fb", 2) == 0) {
-            int b;
-            if (sscanf(line, "fb %d", &b) == 1 && b >= 0) {
-                cpu.FB = b;
-                printf("Switched to fixed bank %d\n", cpu.FB);
-            } else {
-                printf("Usage: fb <non_negative_integer>\n");
-            }
-            continue;
-        }
-        
-        if (strncmp(line, "bank", 4) == 0) {
-            int b;
-            if (sscanf(line, "bank %d", &b) == 1 && b >= 0) {
-                // Legacy command: set both EB and FB to same bank
-                cpu.EB = b;
-                cpu.FB = b;
-                printf("Switched to bank %d (EB=%d FB=%d)\n", b, cpu.EB, cpu.FB);
-            } else {
-                printf("Usage: bank <non_negative_integer>\n");
-            }
-            continue;
-        }
-        
-        if (strncmp(line, "peek", 4) == 0) {
-            int addr;
-            if (sscanf(line, "peek %o", &addr) == 1) {
-                agc_word_t v = agc_memory_read(&cpu, addr);
-                printf("%04o: %04o\n", addr, v);
-            } else {
-                printf("Usage: peek <addr>\n");
-            }
-            continue;
-        }
-
-        if (strncmp(line, "poke", 4) == 0) {
-            int addr;
-            unsigned int value;
-            if (sscanf(line, "poke %o %o", &addr, &value) == 2) {
-                agc_memory_write(&cpu, addr, (agc_word_t)value);
-                printf("Wrote %04o into %04o (EB:%d FB:%d)\n", value, addr, cpu.EB, cpu.FB);
-            } else {
-                printf("Usage: poke <addr> <octal_value>\n");
-            }
-            continue;
-        }
-
-        if (strncmp(line, "mem", 3) == 0) {
-            int start, end;
-            if (sscanf(line, "mem %o %o", &start, &end) == 2) {
-                printf("\nMemory dump (EB:%d FB:%d):\n", cpu.EB, cpu.FB);
-
-                int addr = start;
-                while (addr <= end) {
-                    printf(CLR_ADDR "%04o" CLR_RESET ": ", addr);
-
-                    for (int i = 0; i < 8 && addr <= end; ++i, ++addr) {
-                        agc_word_t v = agc_memory_read(&cpu, addr);
-
-                        const char *color = (v == 0) ? CLR_ZERO : CLR_NONZERO;
-                        if (addr == cpu.Z) {
-                            color = CLR_PC;
-                        }
-
-                        printf("%s%04o" CLR_RESET " ", color, v);
-                    }
-                    printf("\n");
-                }
-                printf("\n");
-            } else {
-                printf("Usage: mem <start> <end>\n");
-            }
-            continue;
-        }
-
-        if (strncmp(line, "rom", 3) == 0) {
-            char filename[128];
-            if (sscanf(line, "rom %127s", filename) == 1) {
-                if (agc_load_rom(filename)) {
-                    printf("ROM loaded from %s\n", filename);
-                    rom_loaded = true;
-                } else {
-                    printf("Failed to load ROM from %s\n", filename);
-                }
-            } else {
-                printf("Usage: rom <filename>\n");
-            }
-            continue;
-        }
-
-        printf(CLR_ERROR "Unknown command\n" CLR_RESET);
     }
 }
 

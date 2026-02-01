@@ -39,7 +39,8 @@ static inline agc_word_t agc_add(agc_word_t a, agc_word_t b) {
     // In 1's complement: a + b = a + b (with end-around carry)
     uint32_t sum = (uint32_t)a + (uint32_t)b;
     uint32_t carry = sum >> 15;
-    return agc_normalize((agc_word_t)sum) + (agc_word_t)carry;
+    // Second normalization needed: adding carry can reintroduce a 16th bit
+    return agc_normalize(agc_normalize((agc_word_t)sum) + (agc_word_t)carry);
 }
 
 #endif // AGC_TYPES_H

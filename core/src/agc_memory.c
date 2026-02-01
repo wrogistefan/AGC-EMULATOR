@@ -23,11 +23,15 @@ agc_word_t agc_memory_read(agc_cpu_t *cpu, agc_word_t addr) {
 
     if (addr < AGC_ERASE_BANK_SIZE) {
         // Erasable memory - banked via EB
-        int phys = cpu->EB * AGC_ERASE_BANK_SIZE + addr;
+        // Clamp EB to valid range (0 to AGC_RAM_SIZE/AGC_ERASE_BANK_SIZE - 1)
+        uint8_t eb = cpu->EB % (AGC_RAM_SIZE / AGC_ERASE_BANK_SIZE);
+        int phys = eb * AGC_ERASE_BANK_SIZE + addr;
         return erasable[phys];
     } else {
         // Fixed memory - banked via FB
-        int phys = cpu->FB * AGC_FIXED_BANK_SIZE + (addr - AGC_ERASE_BANK_SIZE);
+        // Clamp FB to valid range (0 to AGC_ROM_SIZE/AGC_FIXED_BANK_SIZE)
+        uint8_t fb = cpu->FB % ((AGC_ROM_SIZE + AGC_FIXED_BANK_SIZE - 1) / AGC_FIXED_BANK_SIZE);
+        int phys = fb * AGC_FIXED_BANK_SIZE + (addr - AGC_ERASE_BANK_SIZE);
         return fixed[phys];
     }
 }
@@ -43,7 +47,9 @@ void agc_memory_write(agc_cpu_t *cpu, agc_word_t addr, agc_word_t value) {
 
     if (addr < AGC_ERASE_BANK_SIZE) {
         // Erasable memory - banked via EB
-        int phys = cpu->EB * AGC_ERASE_BANK_SIZE + addr;
+        // Clamp EB to valid range (0 to AGC_RAM_SIZE/AGC_ERASE_BANK_SIZE - 1)
+        uint8_t eb = cpu->EB % (AGC_RAM_SIZE / AGC_ERASE_BANK_SIZE);
+        int phys = eb * AGC_ERASE_BANK_SIZE + addr;
         erasable[phys] = value & 017777;
     }
     // Writes to fixed memory (ROM) are ignored
