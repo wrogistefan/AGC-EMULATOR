@@ -20,7 +20,9 @@ void agc_cpu_reset(agc_cpu_t *cpu) {
     // Some simulators start at 02000 (start of fixed memory),
     // but we keep it at 0 until ROM loading is implemented.
     cpu->Z = 0;
-
+    
+    cpu->current_bank = 0; // Start in bank 0
+    
     // Memory bank registers
     cpu->EB = 0;
     cpu->FB = 0;
