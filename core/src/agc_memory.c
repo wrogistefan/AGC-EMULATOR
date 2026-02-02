@@ -8,8 +8,8 @@ static agc_word_t erasable[AGC_RAM_SIZE];
 static agc_word_t fixed[AGC_ROM_SIZE];
 
 // Bank size constants
-#define AGC_ERASE_BANK_SIZE  02000   // 2K words per erasable bank
-#define AGC_FIXED_BANK_SIZE  010000  // 8K words per fixed bank
+#define AGC_ERASE_BANK_SIZE  02000   // 1024 words (1K) per erasable bank
+#define AGC_FIXED_BANK_SIZE  010000  // 4096 words (4K) per fixed bank
 
 /*
  * Read a word from AGC memory.
@@ -19,7 +19,7 @@ static agc_word_t fixed[AGC_ROM_SIZE];
  */
 agc_word_t agc_memory_read(agc_cpu_t *cpu, agc_word_t addr) {
     // Normalize address to 15 bits
-    addr = addr & 017777;
+    addr = addr & 077777;
 
     if (addr < AGC_ERASE_BANK_SIZE) {
         // Erasable memory - banked via EB
@@ -29,9 +29,12 @@ agc_word_t agc_memory_read(agc_cpu_t *cpu, agc_word_t addr) {
         return erasable[phys];
     } else {
         // Fixed memory - banked via FB
-        // Clamp FB to valid range (0 to AGC_ROM_SIZE/AGC_FIXED_BANK_SIZE)
-        uint8_t fb = cpu->FB % ((AGC_ROM_SIZE + AGC_FIXED_BANK_SIZE - 1) / AGC_FIXED_BANK_SIZE);
+        // Clamp FB to valid range (0 to AGC_ROM_SIZE/AGC_FIXED_BANK_SIZE - 1)
+        uint8_t fb = cpu->FB % (AGC_ROM_SIZE / AGC_FIXED_BANK_SIZE);
         int phys = fb * AGC_FIXED_BANK_SIZE + (addr - AGC_ERASE_BANK_SIZE);
+        // Ensure physical address is within bounds
+        if (phys < 0) phys = 0;
+        if (phys >= AGC_ROM_SIZE) phys = AGC_ROM_SIZE - 1;
         return fixed[phys];
     }
 }
@@ -43,14 +46,14 @@ agc_word_t agc_memory_read(agc_cpu_t *cpu, agc_word_t addr) {
  */
 void agc_memory_write(agc_cpu_t *cpu, agc_word_t addr, agc_word_t value) {
     // Normalize address to 15 bits
-    addr = addr & 017777;
+    addr = addr & 077777;
 
     if (addr < AGC_ERASE_BANK_SIZE) {
         // Erasable memory - banked via EB
         // Clamp EB to valid range (0 to AGC_RAM_SIZE/AGC_ERASE_BANK_SIZE - 1)
         uint8_t eb = cpu->EB % (AGC_RAM_SIZE / AGC_ERASE_BANK_SIZE);
         int phys = eb * AGC_ERASE_BANK_SIZE + addr;
-        erasable[phys] = value & 0177777;
+        erasable[phys] = agc_normalize(value);
     }
     // Writes to fixed memory (ROM) are ignored
 }
@@ -80,11 +83,44 @@ bool agc_load_rom(const char *filename) {
         if (fread(&hi, 1, 1, f) != 1) break;
         if (fread(&lo, 1, 1, f) != 1) break;
 
-        uint16_t word = ((hi << 8) | lo) & 017777; // 15 bits
+        uint16_t word = ((hi << 8) | lo) & 077777; // 15 bits
         fixed[i] = word;
     }
 
     fclose(f);
     return true;
+}
+
+/*
+ * Erasable memory helpers for testing.
+ * Direct access to erasable memory without going through bank registers.
+ */
+void agc_erasable_set(uint8_t bank, uint16_t addr, agc_word_t value) {
+    uint8_t eb = bank % (AGC_RAM_SIZE / AGC_ERASE_BANK_SIZE);
+    int phys = eb * AGC_ERASE_BANK_SIZE + (addr & 0777);
+    erasable[phys] = agc_normalize(value);
+}
+
+agc_word_t agc_erasable_get(uint8_t bank, uint16_t addr) {
+    uint8_t eb = bank % (AGC_RAM_SIZE / AGC_ERASE_BANK_SIZE);
+    int phys = eb * AGC_ERASE_BANK_SIZE + (addr & 0777);
+    return erasable[phys];
+}
+
+/*
+ * ROM/Fixed memory helpers for testing.
+ * Direct access to fixed memory without going through bank registers.
+ */
+void agc_rom_set(uint32_t addr, agc_word_t value) {
+    if (addr < AGC_ROM_SIZE) {
+        fixed[addr] = agc_normalize(value);
+    }
+}
+
+agc_word_t agc_rom_get(uint32_t addr) {
+    if (addr < AGC_ROM_SIZE) {
+        return fixed[addr];
+    }
+    return 0;
 }
 

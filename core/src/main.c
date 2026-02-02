@@ -48,6 +48,16 @@ static bool parse_positive_long(const char *s, long *out) {
     return true;
 }
 
+/* Helper: parse non-negative long from string, returns false on error */
+static bool parse_non_negative_long(const char *s, long *out) {
+    if (!s || !*s) return false;
+    char *endptr;
+    long val = strtol(s, &endptr, 10);
+    if (endptr == s || val < 0) return false;
+    *out = val;
+    return true;
+}
+
 /* Helper: split line into command and args */
 static void split_command(char *line, char **cmd, char **args) {
     *cmd = (char *)skip_ws(line);
@@ -79,9 +89,13 @@ static void disasm_word(agc_word_t instr, char *buf, size_t buf_size) {
 
     switch (opcode) {
         case 0: mnemonic = "TC";    break;
-        case 1: mnemonic = "CCS";   break;
-        case 2: mnemonic = "INDEX"; break;
-        case 3: mnemonic = "XCH";   break;
+        case 1: mnemonic = "XCH";   break;
+        case 2: mnemonic = "TS";    break;
+        case 3: mnemonic = "CA";    break;
+        case 4: mnemonic = "CCS";   break;
+        case 5: mnemonic = "INDEX"; break;
+        case 6: mnemonic = "ADS";   break;
+        case 7: mnemonic = "BUSY";  break;
         default: mnemonic = "???";  break;
     }
 
@@ -172,7 +186,7 @@ static bool cmd_dis(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
 static bool cmd_eb(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
     (void)rom_loaded;
     long b;
-    if (!parse_positive_long(args, &b) || b < 0) {
+    if (!parse_non_negative_long(args, &b)) {
         print_colored("Usage", CLR_ERROR, "eb <non_negative_integer>");
         return false;
     }
@@ -184,7 +198,7 @@ static bool cmd_eb(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
 static bool cmd_fb(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
     (void)rom_loaded;
     long b;
-    if (!parse_positive_long(args, &b) || b < 0) {
+    if (!parse_non_negative_long(args, &b)) {
         print_colored("Usage", CLR_ERROR, "fb <non_negative_integer>");
         return false;
     }
@@ -196,7 +210,7 @@ static bool cmd_fb(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
 static bool cmd_bank(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
     (void)rom_loaded;
     long b;
-    if (!parse_positive_long(args, &b) || b < 0) {
+    if (!parse_non_negative_long(args, &b)) {
         print_colored("Usage", CLR_ERROR, "bank <non_negative_integer>");
         return false;
     }

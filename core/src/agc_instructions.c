@@ -73,4 +73,3 @@ void agc_instr_TS(agc_cpu_t *cpu, uint16_t address) {
 void agc_instr_CA(agc_cpu_t *cpu, uint16_t address) {
     cpu->A = agc_memory_read(cpu, address);
 }
-
