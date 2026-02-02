@@ -15,4 +15,14 @@ void agc_memory_write(agc_cpu_t *cpu, agc_word_t address, agc_word_t value);
 // ROM loading (for Colossus/Luminary binaries)
 void agc_memory_load_rom(const char *path);
 
-#endif // AGC_MEMORY_H
+bool agc_load_rom(const char *filename);
+
+// Erasable memory helpers (for testing)
+void agc_erasable_set(uint8_t bank, uint16_t addr, agc_word_t value);
+agc_word_t agc_erasable_get(uint8_t bank, uint16_t addr);
+
+// ROM/Fixed memory helpers (for testing)
+void agc_rom_set(uint32_t addr, agc_word_t value);
+agc_word_t agc_rom_get(uint32_t addr);
+
+#endif 
