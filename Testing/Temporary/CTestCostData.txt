@@ -1,2 +1,2 @@
-BasicTest 1 0.0332068
+BasicTest 2 0.000616065
 ---

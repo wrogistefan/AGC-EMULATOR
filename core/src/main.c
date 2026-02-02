@@ -64,43 +64,42 @@ static bool parse_single_octal_arg(const char *args, int *out, const char *cmd_n
 
 /* Helper: parse two octal arguments */
 static bool parse_two_octal_args(const char *args, int *a, int *b, const char *cmd_name) {
-    /* Find the space that separates the two arguments */
-    const char *space = strchr(args, ' ');
-    if (!space) {
+    /* Skip leading whitespace and parse first octal number */
+    const char *p = skip_ws(args);
+    const char *first_start = p;
+    while (*p >= '0' && *p <= '7') p++;
+    const char *first_end = p;
+    int first_len = first_end - first_start;
+    if (first_len == 0) {
         print_usage(cmd_name);
         return false;
     }
-    
-    /* Parse first arg: only the part before the space */
-    int first_len = space - args;
+
+    /* Skip whitespace between arguments */
+    p = skip_ws(p);
+    if (!*p) {
+        print_usage(cmd_name);
+        return false;
+    }
+
+    /* Parse second octal number directly without copying */
+    int second = parse_octal(p);
+    if (second < 0) {
+        print_usage(cmd_name);
+        return false;
+    }
+
+    /* Parse first octal number directly without copying */
     char first_buf[16];
     if (first_len >= (int)sizeof(first_buf)) {
         print_usage(cmd_name);
         return false;
     }
-    memcpy(first_buf, args, first_len);
+    memcpy(first_buf, first_start, first_len);
     first_buf[first_len] = '\0';
-    int first = parse_octal(skip_ws(first_buf));
-    
-    /* Parse second arg: skip leading ws, then find end of octal digits */
-    const char *second_start = skip_ws(space);
-    const char *p = second_start;
-    while (*p && *p >= '0' && *p <= '7') p++;
-    int second_len = p - second_start;
-    if (second_len == 0) {
-        print_usage(cmd_name);
-        return false;
-    }
-    char second_buf[16];
-    if (second_len >= (int)sizeof(second_buf)) {
-        print_usage(cmd_name);
-        return false;
-    }
-    memcpy(second_buf, second_start, second_len);
-    second_buf[second_len] = '\0';
-    int second = parse_octal(second_buf);
-    
-    if (first < 0 || second < 0) {
+    int first = parse_octal(first_buf);
+
+    if (first < 0) {
         print_usage(cmd_name);
         return false;
     }
