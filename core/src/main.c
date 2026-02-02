@@ -53,7 +53,7 @@ static void print_usage(const char *cmd);
 
 /* Helper: parse single octal argument */
 static bool parse_single_octal_arg(const char *args, int *out, const char *cmd_name) {
-    int v = parse_octal(args);
+    int v = parse_octal(skip_ws(args));
     if (v < 0) {
         print_usage(cmd_name);
         return false;
@@ -64,7 +64,7 @@ static bool parse_single_octal_arg(const char *args, int *out, const char *cmd_n
 
 /* Helper: parse two octal arguments */
 static bool parse_two_octal_args(const char *args, int *a, int *b, const char *cmd_name) {
-    int first = parse_octal(args);
+    int first = parse_octal(skip_ws(args));
     const char *space = strchr(args, ' ');
     if (!space) {
         print_usage(cmd_name);

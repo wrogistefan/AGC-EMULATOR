@@ -16,3 +16,10 @@ Makefile
 
 # Logs
 *.log
+
+# Local build artifacts
+agc
+*.out
+*.exe
+*.bin
+*.elf
