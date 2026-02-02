@@ -48,13 +48,46 @@ static bool parse_positive_long(const char *s, long *out) {
     return true;
 }
 
-/* Helper: parse non-negative long from string, returns false on error */
-static bool parse_non_negative_long(const char *s, long *out) {
-    if (!s || !*s) return false;
-    char *endptr;
-    long val = strtol(s, &endptr, 10);
-    if (endptr == s || val < 0) return false;
-    *out = val;
+/* Forward declaration for print_usage */
+static void print_usage(const char *cmd);
+
+/* Helper: parse single octal argument */
+static bool parse_single_octal_arg(const char *args, int *out, const char *cmd_name) {
+    int v = parse_octal(args);
+    if (v < 0) {
+        print_usage(cmd_name);
+        return false;
+    }
+    *out = v;
+    return true;
+}
+
+/* Helper: parse two octal arguments */
+static bool parse_two_octal_args(const char *args, int *a, int *b, const char *cmd_name) {
+    int first = parse_octal(args);
+    const char *space = strchr(args, ' ');
+    if (!space) {
+        print_usage(cmd_name);
+        return false;
+    }
+    int second = parse_octal(skip_ws(space));
+    if (first < 0 || second < 0) {
+        print_usage(cmd_name);
+        return false;
+    }
+    *a = first;
+    *b = second;
+    return true;
+}
+
+/* Helper: parse non-negative long argument */
+static bool parse_non_negative_long(const char *args, long *out, const char *cmd_name) {
+    long v;
+    if (!parse_positive_long(args, &v) || v < 0) {
+        print_usage(cmd_name);
+        return false;
+    }
+    *out = v;
     return true;
 }
 
@@ -136,9 +169,10 @@ static bool cmd_step(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
 }
 
 static bool cmd_run(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
+    (void)rom_loaded;
     long n;
     if (!parse_positive_long(args, &n)) {
-        print_colored("Usage", CLR_ERROR, "run <positive_number>");
+        print_usage("run");
         return false;
     }
     for (long i = 0; i < n; ++i) {
@@ -153,17 +187,10 @@ static bool cmd_run(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
 
 static bool cmd_load(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
     (void)rom_loaded;
-    int addr = parse_octal(args);
-    const char *space = strchr(args, ' ');
-    if (!space) {
-        print_colored("Usage", CLR_ERROR, "load <addr> <octal_value>");
+    int addr, value;
+    if (!parse_two_octal_args(args, &addr, &value, "load"))
         return false;
-    }
-    int value = parse_octal(skip_ws(space));
-    if (addr < 0 || value < 0) {
-        print_colored("Usage", CLR_ERROR, "load <addr> <octal_value>");
-        return false;
-    }
+
     agc_memory_write(cpu, (agc_word_t)addr, (agc_word_t)value);
     printf("Loaded %04o into %04o (EB:%d FB:%d)\n", value, addr, cpu->EB, cpu->FB);
     return true;
@@ -171,11 +198,10 @@ static bool cmd_load(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
 
 static bool cmd_dis(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
     (void)rom_loaded;
-    int addr = parse_octal(args);
-    if (addr < 0) {
-        print_colored("Usage", CLR_ERROR, "dis <addr>");
+    int addr;
+    if (!parse_single_octal_arg(args, &addr, "dis"))
         return false;
-    }
+
     agc_word_t instr = agc_memory_read(cpu, (agc_word_t)addr);
     char dis[32];
     disasm_word(instr, dis, sizeof(dis));
@@ -186,10 +212,8 @@ static bool cmd_dis(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
 static bool cmd_eb(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
     (void)rom_loaded;
     long b;
-    if (!parse_non_negative_long(args, &b)) {
-        print_colored("Usage", CLR_ERROR, "eb <non_negative_integer>");
+    if (!parse_non_negative_long(args, &b, "eb"))
         return false;
-    }
     cpu->EB = (uint8_t)b;
     printf("Switched to erasable bank %d\n", cpu->EB);
     return true;
@@ -198,10 +222,8 @@ static bool cmd_eb(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
 static bool cmd_fb(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
     (void)rom_loaded;
     long b;
-    if (!parse_non_negative_long(args, &b)) {
-        print_colored("Usage", CLR_ERROR, "fb <non_negative_integer>");
+    if (!parse_non_negative_long(args, &b, "fb"))
         return false;
-    }
     cpu->FB = (uint8_t)b;
     printf("Switched to fixed bank %d\n", cpu->FB);
     return true;
@@ -210,10 +232,8 @@ static bool cmd_fb(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
 static bool cmd_bank(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
     (void)rom_loaded;
     long b;
-    if (!parse_non_negative_long(args, &b)) {
-        print_colored("Usage", CLR_ERROR, "bank <non_negative_integer>");
+    if (!parse_non_negative_long(args, &b, "bank"))
         return false;
-    }
     cpu->EB = (uint8_t)b;
     cpu->FB = (uint8_t)b;
     printf("Switched to bank %ld (EB=%d FB=%d)\n", b, cpu->EB, cpu->FB);
@@ -222,11 +242,9 @@ static bool cmd_bank(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
 
 static bool cmd_peek(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
     (void)rom_loaded;
-    int addr = parse_octal(args);
-    if (addr < 0) {
-        print_colored("Usage", CLR_ERROR, "peek <addr>");
+    int addr;
+    if (!parse_single_octal_arg(args, &addr, "peek"))
         return false;
-    }
     agc_word_t v = agc_memory_read(cpu, (agc_word_t)addr);
     printf("%04o: %04o\n", addr, v);
     return true;
@@ -234,17 +252,9 @@ static bool cmd_peek(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
 
 static bool cmd_poke(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
     (void)rom_loaded;
-    int addr = parse_octal(args);
-    const char *space = strchr(args, ' ');
-    if (!space) {
-        print_colored("Usage", CLR_ERROR, "poke <addr> <octal_value>");
+    int addr, value;
+    if (!parse_two_octal_args(args, &addr, &value, "poke"))
         return false;
-    }
-    int value = parse_octal(skip_ws(space));
-    if (addr < 0 || value < 0) {
-        print_colored("Usage", CLR_ERROR, "poke <addr> <octal_value>");
-        return false;
-    }
     agc_memory_write(cpu, (agc_word_t)addr, (agc_word_t)value);
     printf("Wrote %04o into %04o (EB:%d FB:%d)\n", value, addr, cpu->EB, cpu->FB);
     return true;
@@ -252,15 +262,11 @@ static bool cmd_poke(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
 
 static bool cmd_mem(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
     (void)rom_loaded;
-    int start = parse_octal(args);
-    const char *space = strchr(args, ' ');
-    if (!space) {
-        print_colored("Usage", CLR_ERROR, "mem <start> <end>");
+    int start, end;
+    if (!parse_two_octal_args(args, &start, &end, "mem"))
         return false;
-    }
-    int end = parse_octal(skip_ws(space));
-    if (start < 0 || end < 0 || start > end) {
-        print_colored("Usage", CLR_ERROR, "mem <start> <end>");
+    if (start > end) {
+        print_usage("mem");
         return false;
     }
 
@@ -330,7 +336,7 @@ static void print_usage(const char *cmd) {
         /* Find and print usage for specific command */
         for (size_t i = 0; i < sizeof(commands)/sizeof(commands[0]); i++) {
             if (strcmp(commands[i].name, cmd) == 0) {
-                printf("Usage: %s\n", commands[i].usage);
+                print_colored("Usage", CLR_ERROR, "%s", commands[i].usage);
                 return;
             }
         }
