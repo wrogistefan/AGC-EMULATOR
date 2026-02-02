@@ -19,6 +19,8 @@ Makefile
 
 # Local build artifacts
 agc
+agc_main
+test_basic
 *.out
 *.exe
 *.bin

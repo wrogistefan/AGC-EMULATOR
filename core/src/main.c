@@ -64,13 +64,42 @@ static bool parse_single_octal_arg(const char *args, int *out, const char *cmd_n
 
 /* Helper: parse two octal arguments */
 static bool parse_two_octal_args(const char *args, int *a, int *b, const char *cmd_name) {
-    int first = parse_octal(skip_ws(args));
+    /* Find the space that separates the two arguments */
     const char *space = strchr(args, ' ');
     if (!space) {
         print_usage(cmd_name);
         return false;
     }
-    int second = parse_octal(skip_ws(space));
+    
+    /* Parse first arg: only the part before the space */
+    int first_len = space - args;
+    char first_buf[16];
+    if (first_len >= (int)sizeof(first_buf)) {
+        print_usage(cmd_name);
+        return false;
+    }
+    memcpy(first_buf, args, first_len);
+    first_buf[first_len] = '\0';
+    int first = parse_octal(skip_ws(first_buf));
+    
+    /* Parse second arg: skip leading ws, then find end of octal digits */
+    const char *second_start = skip_ws(space);
+    const char *p = second_start;
+    while (*p && *p >= '0' && *p <= '7') p++;
+    int second_len = p - second_start;
+    if (second_len == 0) {
+        print_usage(cmd_name);
+        return false;
+    }
+    char second_buf[16];
+    if (second_len >= (int)sizeof(second_buf)) {
+        print_usage(cmd_name);
+        return false;
+    }
+    memcpy(second_buf, second_start, second_len);
+    second_buf[second_len] = '\0';
+    int second = parse_octal(second_buf);
+    
     if (first < 0 || second < 0) {
         print_usage(cmd_name);
         return false;
