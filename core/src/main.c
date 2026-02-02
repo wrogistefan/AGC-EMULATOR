@@ -53,7 +53,7 @@ static void print_usage(const char *cmd);
 
 /* Helper: parse single octal argument */
 static bool parse_single_octal_arg(const char *args, int *out, const char *cmd_name) {
-    int v = parse_octal(args);
+    int v = parse_octal(skip_ws(args));
     if (v < 0) {
         print_usage(cmd_name);
         return false;
@@ -64,14 +64,42 @@ static bool parse_single_octal_arg(const char *args, int *out, const char *cmd_n
 
 /* Helper: parse two octal arguments */
 static bool parse_two_octal_args(const char *args, int *a, int *b, const char *cmd_name) {
-    int first = parse_octal(args);
-    const char *space = strchr(args, ' ');
-    if (!space) {
+    /* Skip leading whitespace and parse first octal number */
+    const char *p = skip_ws(args);
+    const char *first_start = p;
+    while (*p >= '0' && *p <= '7') p++;
+    const char *first_end = p;
+    int first_len = first_end - first_start;
+    if (first_len == 0) {
         print_usage(cmd_name);
         return false;
     }
-    int second = parse_octal(skip_ws(space));
-    if (first < 0 || second < 0) {
+
+    /* Skip whitespace between arguments */
+    p = skip_ws(p);
+    if (!*p) {
+        print_usage(cmd_name);
+        return false;
+    }
+
+    /* Parse second octal number directly without copying */
+    int second = parse_octal(p);
+    if (second < 0) {
+        print_usage(cmd_name);
+        return false;
+    }
+
+    /* Parse first octal number directly without copying */
+    char first_buf[16];
+    if (first_len >= (int)sizeof(first_buf)) {
+        print_usage(cmd_name);
+        return false;
+    }
+    memcpy(first_buf, first_start, first_len);
+    first_buf[first_len] = '\0';
+    int first = parse_octal(first_buf);
+
+    if (first < 0) {
         print_usage(cmd_name);
         return false;
     }
