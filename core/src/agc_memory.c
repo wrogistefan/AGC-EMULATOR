@@ -145,7 +145,12 @@ static uint8_t get_fixed_bank(agc_cpu_t *cpu, uint16_t addr) {
     /* Fixed ROM (04000-07777): banked via FB */
     /* FB selects which of F2-F35 is active */
     /* FB=0 selects F2, FB=1 selects F3, ..., FB=33 selects F35 */
-    return (cpu->FB & 037) + 2;
+    uint8_t fb = cpu->FB;
+    if (fb > 33) {
+        fb = 33;  /* Clamp to valid AGC range */
+    }
+    
+    return fb + 2;
 }
 
 /* ============================================================================
@@ -173,21 +178,14 @@ agc_word_t agc_instruction_fetch(agc_cpu_t *cpu, uint16_t addr) {
     /* Fixed-fixed ROM (02000-03777) */
     if (addr >= FF_START && addr <= FF_END) {
         uint8_t bank = get_fixed_bank(cpu, addr);
-        uint16_t offset;
-        
-        if (addr < FF_BANK1_START) {
-            offset = addr - FF_BANK0_START;
-        } else {
-            offset = addr - FF_BANK1_START;
-        }
-        
+        uint16_t offset = addr & 0777;
         return fixed[bank][offset];
     }
     
     /* Fixed ROM (04000-07777) */
     if (addr >= FIXED_START && addr <= FIXED_END) {
         uint8_t bank = get_fixed_bank(cpu, addr);
-        uint16_t offset = addr - FIXED_START;
+        uint16_t offset = addr & 0777;  /* 0-1023 within fixed ROM bank */
         return fixed[bank][offset];
     }
     
@@ -230,13 +228,7 @@ agc_word_t agc_read(agc_cpu_t *cpu, uint16_t addr) {
     /* Fixed-Fixed ROM (02000-03777) */
     if (addr >= FF_START && addr <= FF_END) {
         uint8_t bank = get_fixed_bank(cpu, addr);
-        uint16_t offset;
-        
-        if (addr < FF_BANK1_START) {
-            offset = addr - FF_BANK0_START;
-        } else {
-            offset = addr - FF_BANK1_START;
-        }
+        uint16_t offset = addr & 0777;
         
         return fixed[bank][offset];
     }
@@ -244,7 +236,7 @@ agc_word_t agc_read(agc_cpu_t *cpu, uint16_t addr) {
     /* Fixed ROM (04000-07777) */
     if (addr >= FIXED_START && addr <= FIXED_END) {
         uint8_t bank = get_fixed_bank(cpu, addr);
-        uint16_t offset = addr - FIXED_START;
+        uint16_t offset = addr & 0777;  /* 0-1023 within fixed ROM bank */
         return fixed[bank][offset];
     }
     

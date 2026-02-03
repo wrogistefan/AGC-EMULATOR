@@ -204,7 +204,7 @@ static bool cmd_run(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
         return false;
     }
     for (long i = 0; i < n; ++i) {
-        agc_word_t instr = agc_read(cpu, cpu->Z);
+        agc_word_t instr = agc_instruction_fetch(cpu, cpu->Z);
         char dis[32];
         disasm_word(instr, dis, sizeof(dis));
         printf("PC %04o: %04o  (%s)\n", cpu->Z, instr, dis);
