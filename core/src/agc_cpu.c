@@ -46,7 +46,7 @@ void agc_cpu_step(agc_cpu_t *cpu) {
     if (!cpu) return;
 
     // Fetch instruction from memory at address Z
-    agc_word_t instr = agc_memory_read(cpu, cpu->Z);
+    agc_word_t instr = agc_instruction_fetch(cpu, cpu->Z);
 
     cpu->current_instruction = instr;
 

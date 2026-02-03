@@ -204,7 +204,7 @@ static bool cmd_run(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
         return false;
     }
     for (long i = 0; i < n; ++i) {
-        agc_word_t instr = agc_memory_read(cpu, cpu->Z);
+        agc_word_t instr = agc_instruction_fetch(cpu, cpu->Z);
         char dis[32];
         disasm_word(instr, dis, sizeof(dis));
         printf("PC %04o: %04o  (%s)\n", cpu->Z, instr, dis);
@@ -219,7 +219,7 @@ static bool cmd_load(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
     if (!parse_two_octal_args(args, &addr, &value, "load"))
         return false;
 
-    agc_memory_write(cpu, (agc_word_t)addr, (agc_word_t)value);
+    agc_write(cpu, (agc_word_t)addr, (agc_word_t)value);
     printf("Loaded %04o into %04o (EB:%d FB:%d)\n", value, addr, cpu->EB, cpu->FB);
     return true;
 }
@@ -230,7 +230,7 @@ static bool cmd_dis(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
     if (!parse_single_octal_arg(args, &addr, "dis"))
         return false;
 
-    agc_word_t instr = agc_memory_read(cpu, (agc_word_t)addr);
+    agc_word_t instr = agc_read(cpu, (agc_word_t)addr);
     char dis[32];
     disasm_word(instr, dis, sizeof(dis));
     printf("(%d:%04o) %04o  %s\n", (addr < 02000) ? cpu->EB : cpu->FB, addr, instr, dis);
@@ -273,7 +273,7 @@ static bool cmd_peek(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
     int addr;
     if (!parse_single_octal_arg(args, &addr, "peek"))
         return false;
-    agc_word_t v = agc_memory_read(cpu, (agc_word_t)addr);
+    agc_word_t v = agc_read(cpu, (agc_word_t)addr);
     printf("%04o: %04o\n", addr, v);
     return true;
 }
@@ -283,7 +283,7 @@ static bool cmd_poke(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
     int addr, value;
     if (!parse_two_octal_args(args, &addr, &value, "poke"))
         return false;
-    agc_memory_write(cpu, (agc_word_t)addr, (agc_word_t)value);
+    agc_write(cpu, (agc_word_t)addr, (agc_word_t)value);
     printf("Wrote %04o into %04o (EB:%d FB:%d)\n", value, addr, cpu->EB, cpu->FB);
     return true;
 }
@@ -305,7 +305,7 @@ static bool cmd_mem(agc_cpu_t *cpu, const char *args, bool *rom_loaded) {
         printf(CLR_ADDR "%04o" CLR_RESET ": ", addr);
 
         for (int i = 0; i < 8 && addr <= end; ++i, ++addr) {
-            agc_word_t v = agc_memory_read(cpu, (agc_word_t)addr);
+            agc_word_t v = agc_read(cpu, (agc_word_t)addr);
 
             const char *color = (v == 0) ? CLR_ZERO : CLR_NONZERO;
             if (addr == cpu->Z) {

@@ -48,8 +48,8 @@ void agc_instr_TC(agc_cpu_t *cpu, uint16_t address) {
  * Swap the contents of register A with memory[address].
  */
 void agc_instr_XCH(agc_cpu_t *cpu, uint16_t address) {
-    agc_word_t temp = agc_memory_read(cpu, address);
-    agc_memory_write(cpu, address, cpu->A);
+    agc_word_t temp = agc_read(cpu, address);
+    agc_write(cpu, address, cpu->A);
     cpu->A = temp;
 }
 
@@ -61,7 +61,7 @@ void agc_instr_XCH(agc_cpu_t *cpu, uint16_t address) {
  * as per real AGC hardware behavior.
  */
 void agc_instr_TS(agc_cpu_t *cpu, uint16_t address) {
-    agc_memory_write(cpu, address, cpu->A);
+    agc_write(cpu, address, cpu->A);
 }
 
 /*
@@ -71,5 +71,5 @@ void agc_instr_TS(agc_cpu_t *cpu, uint16_t address) {
  * This is equivalent to: A = M[addr]
  */
 void agc_instr_CA(agc_cpu_t *cpu, uint16_t address) {
-    cpu->A = agc_memory_read(cpu, address);
+    cpu->A = agc_read(cpu, address);
 }
