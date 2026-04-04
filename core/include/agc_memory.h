@@ -4,25 +4,32 @@
 #include "agc_types.h"
 #include "agc_cpu.h"
 
-// Sizes of AGC memory regions
-#define AGC_RAM_SIZE 2048      // 2K words of erasable memory
-#define AGC_ROM_SIZE 36864     // 36K words of fixed memory
+/*
+ * AGC Block II Memory Model
+ *
+ * Erasable (RAM):
+ *   - 8 banks (E0-E7) x 256 words = 2048 words total
+ *   - Unswitched region (00000-01377): always bank E0
+ *   - Switched region (01400-01777): bank = (EB >> 8) & 07
+ *
+ * Fixed (ROM):
+ *   - 36 banks (F0-F35) x 1024 words = 36864 words total
+ *   - Fixed-fixed (02000-03777): always bank 0
+ *   - Fixed-switchable (04000-07777): bank = (FB >> 10) & 037
+ *
+ * Registers:
+ *   - EB: full 15-bit, bank = (EB >> 8) & 07
+ *   - FB: full 15-bit, bank = (FB >> 10) & 037
+ *   - Register addresses (00000-00017) are memory-mapped, writable via agc_write
+ */
 
-// Memory access API
-agc_word_t agc_memory_read(agc_cpu_t *cpu, agc_word_t address);
-void agc_memory_write(agc_cpu_t *cpu, agc_word_t address, agc_word_t value);
+/* ============================================================================
+ * Public Memory API
+ * ============================================================================ */
 
-// ROM loading (for Colossus/Luminary binaries)
-void agc_memory_load_rom(const char *path);
-
+agc_word_t agc_read(agc_cpu_t *cpu, uint16_t addr);
+void agc_write(agc_cpu_t *cpu, uint16_t addr, agc_word_t value);
+agc_word_t agc_instruction_fetch(agc_cpu_t *cpu, uint16_t addr);
 bool agc_load_rom(const char *filename);
 
-// Erasable memory helpers (for testing)
-void agc_erasable_set(uint8_t bank, uint16_t addr, agc_word_t value);
-agc_word_t agc_erasable_get(uint8_t bank, uint16_t addr);
-
-// ROM/Fixed memory helpers (for testing)
-void agc_rom_set(uint32_t addr, agc_word_t value);
-agc_word_t agc_rom_get(uint32_t addr);
-
-#endif 
+#endif // AGC_MEMORY_H

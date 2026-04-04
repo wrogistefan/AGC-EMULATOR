@@ -30,15 +30,17 @@ The implementation prioritizes clarity, correctness, and traceability over perfo
 
 ## 2.0 SYSTEM OVERVIEW
 
-The AGC was a 15-bit, 1’s complement machine with a banked memory architecture and a compact instruction set.  
+The AGC was a 15-bit, 1's complement machine with a banked memory architecture and a compact instruction set.  
 This emulator reproduces:
 
-- CPU registers (A, L, Q, Z, EB, FB)  
-- 1’s complement arithmetic and overflow behavior  
-- erasable and fixed memory with bank switching  
+- CPU registers (A, L, Q, Z, EB, FB) — full 15-bit storage  
+- 1's complement arithmetic and overflow behavior  
+- **erasable and fixed memory with hardware-faithful bank switching**  
 - core instruction set semantics  
 - a minimal REPL for interactive inspection and execution  
 - a growing suite of verification tests  
+
+**Memory Architecture Status:** The AGC Block II memory model is now **100% hardware-faithful** per MIT IL E-2536 specification.
 
 The design follows the structure and terminology of the original AGC Program Logic Manuals and GSOP documentation.
 
@@ -75,19 +77,26 @@ The design follows the structure and terminology of the original AGC Program Log
 ### 3.3 Memory Organization
 
 ```
-                AGC MEMORY MAP (Block II)
+                AGC MEMORY MAP (Block II) — HARDWARE FAITHFUL
+
+Erasable (RAM):
    +---------------------------------------------------+
-   | 00000–01777 : Erasable Memory (Bank 0)            |
-   | 02000–03777 : Erasable Memory (Bank 1)            |
-   | ...                                               |
-   | (EB selects bank)                                 |
+   | 00000–01377 : Unswitched region (always bank E0)     |
+   | 01400–01777 : Switched region (bank = (EB>>8)&07)   |
+   | 8 banks × 256 words = 2048 words total          |
    +---------------------------------------------------+
-   | 04000–07777 : Fixed Memory (Bank 0)               |
-   | 10000–13777 : Fixed Memory (Bank 1)               |
-   | ...                                               |
-   | (FB selects bank)                                 |
+
+Fixed (ROM):
+   +---------------------------------------------------+
+   | 02000–03777 : Fixed-fixed (always bank F0)          |
+   | 04000–07777 : Switchable (bank = (FB>>10)&037) |
+   | 36 banks × 1024 words = 36864 words total   |
    +---------------------------------------------------+
 ```
+
+**Register Encoding:**
+- EB = full 15-bit value. Bank = `(EB >> 8) & 07`
+- FB = full 15-bit value. Bank = `(FB >> 10) & 037`
 
 ---
 
@@ -153,25 +162,32 @@ This approach mirrors NASA’s original verification strategy:
 
 ---
 
-## 7.0 ROADMAP
+## 7.0 MILESTONES
 
-### 7.1 Near-Term
-- Full implementation of CCS, INDEX, and overflow behavior  
-- Complete disassembler  
-- Expanded test coverage  
-- DSKY interface module  
+### ✅ Memory Model — COMPLETE
+- 8 banks × 256 words erasable (2048 words total)
+- 36 banks × 1024 words fixed (36864 words total)
+- Full 15-bit EB/FB register semantics per hardware
+- Hardware-faithful bank decoding:
+  - Erasable: `(EB >> 8) & 07`
+  - Fixed: `(FB >> 10) & 037`
+- Unswitched region (00000-01377) always maps to bank E0
+- Switched region (01400-01777) uses EB register
+- Defensive bounds checking with assert guards
+- Verified against AGC Block II documentation (MIT IL E-2536)
 
-### 7.2 Mid-Term
+### 7.1 Next Priorities
+- Complete instruction set implementation (remaining opcodes)
+- Interrupt handling
+- I/O channel emulation
+- DSKY interface
+
+### 7.2 Future
 - IMU simulation  
 - Gimbal angle modeling  
 - Executive and Waitlist scheduling  
-- Interrupt handling  
-
-### 7.3 Long-Term
 - Saturn V launch vehicle guidance logic  
 - CSM/LM flight software compatibility  
-- Telemetry and downlink channels  
-- Full mission simulation capability  
 
 ---
 

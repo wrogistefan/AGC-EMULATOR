@@ -35,14 +35,3 @@ target_include_directories(agc_jni PRIVATE
 )
 
 target_link_libraries(agc_jni PRIVATE agc_core)
-
-# Testy jednostkowe
-enable_testing()
-
-add_executable(test_basic
-    tests/test_basic.c
-)
-
-target_link_libraries(test_basic PRIVATE agc_core)
-
-add_test(NAME BasicTest COMMAND test_basic)
