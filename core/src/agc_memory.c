@@ -154,7 +154,8 @@ static uint8_t get_fixed_bank(agc_cpu_t *cpu, uint16_t addr) {
  * the real AGC instruction fetch unit, which reads the raw erasable cells
  * even at addresses that overlap with hardware registers.
  *
- * Ref: MIT IL E-2536 §4 (instruction fetch description)
+ * Invalid accesses (invalid bank index, unmapped address) return 0 by design.
+ * No silent clamping or correction.
  * ============================================================================ */
 
 agc_word_t agc_instruction_fetch(agc_cpu_t *cpu, uint16_t addr) {
@@ -163,6 +164,7 @@ agc_word_t agc_instruction_fetch(agc_cpu_t *cpu, uint16_t addr) {
     /* Erasable (00000-01777₈): fetch directly from array, bypassing registers */
     if (addr <= ERASE_END) {
         uint8_t  bank   = get_erasable_bank(cpu, addr);
+        if (bank >= ERASE_BANK_COUNT) return 0;
         uint16_t offset = addr & (ERASE_BANK_SIZE - 1);
         return erasable[bank][offset];
     }
@@ -195,6 +197,9 @@ agc_word_t agc_instruction_fetch(agc_cpu_t *cpu, uint16_t addr) {
  *   01400-01777₈  → Switched erasable   (bank from EB)
  *   02000-03777₈  → Fixed-fixed ROM     (bank 0)
  *   04000-07777₈  → Fixed ROM           (bank from FB)
+ *
+ * Invalid accesses (invalid bank index, unmapped address) return 0 by design.
+ * No silent clamping or correction — this is hardware-faithful error signaling.
  * ============================================================================ */
 
 agc_word_t agc_read(agc_cpu_t *cpu, uint16_t addr) {
@@ -206,6 +211,7 @@ agc_word_t agc_read(agc_cpu_t *cpu, uint16_t addr) {
 
     if (addr >= ERASE_START && addr <= ERASE_END) {
         uint8_t  bank   = get_erasable_bank(cpu, addr);
+        if (bank >= ERASE_BANK_COUNT) return 0;
         uint16_t offset = addr & (ERASE_BANK_SIZE - 1);
         return erasable[bank][offset];
     }
@@ -263,10 +269,11 @@ void agc_write(agc_cpu_t *cpu, uint16_t addr, agc_word_t value) {
  * Loads a rope-memory binary image (Colossus, Luminary, etc.).
  * Format: 36 banks × 1024 words × 2 bytes (big-endian, 15 bits used).
  *
- * Bank layout in the binary (bank index = physical AGC bank number):
- *   Bank  0: fixed-fixed ROM (addresses 02000-03777₈)
- *   Bank  1: (unused / reserved)
- *   Banks 2-35: fixed-switchable banks (addresses 04000-07777₈ via FB)
+ * Returns:
+ *   - true:  complete ROM image loaded successfully
+ *   - false: file not found, read error, or incomplete (early EOF)
+ *
+ * No silent correction: partial images are rejected, not silently accepted.
  * ============================================================================ */
 
 bool agc_load_rom(const char *filename) {
@@ -278,8 +285,8 @@ bool agc_load_rom(const char *filename) {
     for (int bank = 0; bank < FIXED_BANK_COUNT; bank++) {
         for (int offset = 0; offset < 1024; offset++) {
             uint8_t hi, lo;
-            if (fread(&hi, 1, 1, f) != 1) { fclose(f); return true; }
-            if (fread(&lo, 1, 1, f) != 1) { fclose(f); return true; }
+            if (fread(&hi, 1, 1, f) != 1) { fclose(f); return false; }
+            if (fread(&lo, 1, 1, f) != 1) { fclose(f); return false; }
             fixed[bank][offset] = (((uint16_t)hi << 8) | lo) & 077777;
         }
     }
