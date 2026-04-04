@@ -59,7 +59,7 @@ static uint16_t fixed[36][1024];
 #define FIXED_BANK_COUNT      36      
 
 /* ============================================================================
- * CPU Register Access (internal helpers)
+ * CPU Register Access
  *
  * The register file occupies addresses 00000-00017.
  * These are hardware registers, NOT stored in the erasable array.
@@ -69,7 +69,7 @@ static uint16_t fixed[36][1024];
  * BB is not a hardware register (ignored).
  * ============================================================================ */
 
-static agc_word_t read_register(agc_cpu_t *cpu, uint16_t addr) {
+agc_word_t read_register(agc_cpu_t *cpu, uint16_t addr) {
     switch (addr) {
         case 00000: return cpu->A;
         case 00001: return cpu->L;
@@ -87,7 +87,7 @@ static agc_word_t read_register(agc_cpu_t *cpu, uint16_t addr) {
     }
 }
 
-static void write_register(agc_cpu_t *cpu, uint16_t addr, agc_word_t value) {
+void write_register(agc_cpu_t *cpu, uint16_t addr, agc_word_t value) {
     value &= 077777;
     switch (addr) {
         case 00000: cpu->A  = value; break;
@@ -118,19 +118,12 @@ static void write_register(agc_cpu_t *cpu, uint16_t addr, agc_word_t value) {
  *   - Unswitched region (00000-01377): always bank 0
  *   - Switched region (01400-01777): EB register selects bank
  *   - Bank = (EB >> 8) & 07
- *
- * Defensive: returns ERASE_BANK_COUNT (invalid) if bank index out of bounds.
  */
 static uint8_t get_erasable_bank(agc_cpu_t *cpu, uint16_t addr) {
     if (addr < ERASE_SWITCHED_START) {
         return 0;  /* Unswitched: always bank 0 */
     }
-    uint8_t bank = (cpu->EB >> 8) & 7;
-    assert(bank < ERASE_BANK_COUNT);
-    if (bank >= ERASE_BANK_COUNT) {
-        return ERASE_BANK_COUNT;  /* Invalid sentinel */
-    }
-    return bank;
+    return (cpu->EB >> 8) & 7;  /* Switched: bank from EB */
 }
 
 /* Fixed bank selection.
@@ -147,9 +140,8 @@ static uint8_t get_fixed_bank(agc_cpu_t *cpu, uint16_t addr) {
         return 0;
     }
     uint8_t bank = (cpu->FB >> 10) & 037;
-    assert(bank < FIXED_BANK_COUNT);
     if (bank >= FIXED_BANK_COUNT) {
-        return FIXED_BANK_COUNT;  /* Invalid sentinel */
+        return FIXED_BANK_COUNT;
     }
     return bank;
 }
