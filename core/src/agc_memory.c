@@ -118,12 +118,19 @@ void write_register(agc_cpu_t *cpu, uint16_t addr, agc_word_t value) {
  *   - Unswitched region (00000-01377): always bank 0
  *   - Switched region (01400-01777): EB register selects bank
  *   - Bank = (EB >> 8) & 07
+ *
+ * Defensive: debug assert + return invalid sentinel for out-of-bounds.
  */
 static uint8_t get_erasable_bank(agc_cpu_t *cpu, uint16_t addr) {
     if (addr < ERASE_SWITCHED_START) {
-        return 0;  /* Unswitched: always bank 0 */
+        return 0;
     }
-    return (cpu->EB >> 8) & 7;  /* Switched: bank from EB */
+    uint8_t bank = (cpu->EB >> 8) & 7;
+    assert(bank < ERASE_BANK_COUNT);
+    if (bank >= ERASE_BANK_COUNT) {
+        return ERASE_BANK_COUNT;
+    }
+    return bank;
 }
 
 /* Fixed bank selection.
@@ -133,13 +140,14 @@ static uint8_t get_erasable_bank(agc_cpu_t *cpu, uint16_t addr) {
  *   - Fixed-switchable (04000-07777): FB register selects bank
  *   - Bank = (FB >> 10) & 037
  *
- * Returns FIXED_BANK_COUNT as invalid sentinel if bank >= 36.
+ * Defensive: debug assert + return invalid sentinel for out-of-bounds.
  */
 static uint8_t get_fixed_bank(agc_cpu_t *cpu, uint16_t addr) {
     if (addr >= FF_START && addr <= FF_END) {
         return 0;
     }
     uint8_t bank = (cpu->FB >> 10) & 037;
+    assert(bank < FIXED_BANK_COUNT);
     if (bank >= FIXED_BANK_COUNT) {
         return FIXED_BANK_COUNT;
     }
@@ -255,6 +263,7 @@ void agc_write(agc_cpu_t *cpu, uint16_t addr, agc_word_t value) {
 
     if (addr >= ERASE_START && addr <= ERASE_END) {
         uint8_t  bank   = get_erasable_bank(cpu, addr);
+        if (bank >= ERASE_BANK_COUNT) return;  /* Invalid bank: write ignored */
         uint16_t offset = addr & (ERASE_BANK_SIZE - 1);
         erasable[bank][offset] = value;
         return;
