@@ -14,10 +14,10 @@
  * ============================================================================ */
 
 /* Erasable memory - E0 and E1 banks (RAM) */
-uint16_t erasable[2][1024];
+static uint16_t erasable[2][1024];
 
 /* Fixed memory - F0 through F35 banks (ROM) */
-uint16_t fixed[36][1024];
+static uint16_t fixed[36][1024];
 
 /* ============================================================================
  * Address Constants (Octal)
@@ -42,14 +42,12 @@ uint16_t fixed[36][1024];
 /* Fixed-fixed ROM (unbanked) */
 #define FF_START       02000
 #define FF_END         03777
-#define FF_BANK0_START 02000
-#define FF_BANK1_START 03000
-#define FF_BANK_SIZE   01000        /* 1024 words per bank */
+#define FF_BANK_SIZE   02000        /* 1024 words per bank */
 
 /* Fixed ROM (banked via FB) */
 #define FIXED_START    04000
 #define FIXED_END      07777
-#define FIXED_BANK_SIZE 01000       /* 1024 words per bank */
+#define FIXED_BANK_SIZE 02000       /* 1024 words per bank */
 #define FIXED_BANK_COUNT 36         /* F0-F35 */
 
 /* ============================================================================
@@ -132,24 +130,21 @@ static uint8_t get_erasable_bank(agc_cpu_t *cpu, uint16_t addr) {
     }
 }
 
-/* Get fixed bank from address and FB register */
+/* Get fixed bank from address and FB register.
+ * Returns FIXED_BANK_COUNT for invalid bank selections; callers must check. */
 static uint8_t get_fixed_bank(agc_cpu_t *cpu, uint16_t addr) {
-    /* Fixed-fixed ROM (02000-03777): unbanked */
-    if (addr >= FF_START && addr < FF_BANK1_START) {
+    /* Fixed-fixed ROM (02000-03777): entire 1K range maps to F0 (unbanked) */
+    if (addr >= FF_START && addr <= FF_END) {
         return 0;  /* F0 */
     }
-    if (addr >= FF_BANK1_START && addr <= FF_END) {
-        return 1;  /* F1 */
-    }
-    
+
     /* Fixed ROM (04000-07777): banked via FB */
-    /* FB selects which of F2-F35 is active */
     /* FB=0 selects F2, FB=1 selects F3, ..., FB=33 selects F35 */
     uint8_t fb = cpu->FB;
     if (fb > 33) {
-        fb = 33;  /* Clamp to valid AGC range */
+        return FIXED_BANK_COUNT;  /* Invalid bank selection */
     }
-    
+
     return fb + 2;
 }
 
@@ -178,17 +173,19 @@ agc_word_t agc_instruction_fetch(agc_cpu_t *cpu, uint16_t addr) {
     /* Fixed-fixed ROM (02000-03777) */
     if (addr >= FF_START && addr <= FF_END) {
         uint8_t bank = get_fixed_bank(cpu, addr);
-        uint16_t offset = addr & 0777;
+        if (bank >= FIXED_BANK_COUNT) return 0;
+        uint16_t offset = addr & (FF_BANK_SIZE - 1);
         return fixed[bank][offset];
     }
-    
+
     /* Fixed ROM (04000-07777) */
     if (addr >= FIXED_START && addr <= FIXED_END) {
         uint8_t bank = get_fixed_bank(cpu, addr);
-        uint16_t offset = addr & 0777;  /* 0-1023 within fixed ROM bank */
+        if (bank >= FIXED_BANK_COUNT) return 0;
+        uint16_t offset = addr & (FIXED_BANK_SIZE - 1);
         return fixed[bank][offset];
     }
-    
+
     /* Addresses above 07777 are invalid - return 0 */
     return 0;
 }
@@ -202,11 +199,9 @@ agc_word_t agc_instruction_fetch(agc_cpu_t *cpu, uint16_t addr) {
  * 2. Erasable (00020-01777): Banked via EB register
  *    - Offset 00000-00777: Lower half-bank (EB bit 0 selects bank)
  *    - Offset 01000-01777: Upper half-bank (EB bit 1 selects bank)
- * 3. Fixed-Fixed (02000-03777): Unbanked ROM
- *    - 02000-02777: Fixed-fixed bank 0
- *    - 03000-03777: Fixed-fixed bank 1
+ * 3. Fixed-Fixed (02000-03777): Unbanked ROM (1K bank, F0)
  * 4. Fixed (04000-07777): Banked via FB register
- *    - FB selects which of F2-F35 is active (F0-F1 are fixed-fixed)
+ *    - FB selects which of F2-F35 is active (F0 is fixed-fixed)
  * ============================================================================ */
 
 agc_word_t agc_read(agc_cpu_t *cpu, uint16_t addr) {
@@ -228,15 +223,16 @@ agc_word_t agc_read(agc_cpu_t *cpu, uint16_t addr) {
     /* Fixed-Fixed ROM (02000-03777) */
     if (addr >= FF_START && addr <= FF_END) {
         uint8_t bank = get_fixed_bank(cpu, addr);
-        uint16_t offset = addr & 0777;
-        
+        if (bank >= FIXED_BANK_COUNT) return 0;
+        uint16_t offset = addr & (FF_BANK_SIZE - 1);
         return fixed[bank][offset];
     }
-    
+
     /* Fixed ROM (04000-07777) */
     if (addr >= FIXED_START && addr <= FIXED_END) {
         uint8_t bank = get_fixed_bank(cpu, addr);
-        uint16_t offset = addr & 0777;  /* 0-1023 within fixed ROM bank */
+        if (bank >= FIXED_BANK_COUNT) return 0;
+        uint16_t offset = addr & (FIXED_BANK_SIZE - 1);
         return fixed[bank][offset];
     }
     

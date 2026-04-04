@@ -16,19 +16,6 @@
  */
 
 /* ============================================================================
- * Physical Memory Arrays
- * 
- * Erasable memory: 2 banks × 1024 words = 2048 words total
- * Fixed memory: 36 banks × 1024 words = 36864 words total
- * ============================================================================ */
-
-/* Erasable (RAM) memory - E0 and E1 banks */
-extern uint16_t erasable[2][1024];
-
-/* Fixed (ROM) memory - F0 through F35 banks */
-extern uint16_t fixed[36][1024];
-
-/* ============================================================================
  * CPU Register Access
  * 
  * Registers are at addresses 00000-00017. These are hardware registers,
